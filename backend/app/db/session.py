@@ -9,9 +9,8 @@ def async_database_url(database_url: str) -> str:
     Two rewrites happen here:
     1. ``postgres://`` / ``postgresql://`` → ``postgresql+asyncpg://`` so SQLAlchemy
        picks the async driver.
-    2. ``?sslmode=...`` → ``?ssl=...`` because asyncpg rejects ``sslmode`` (that is a
-       libpq/psycopg keyword). Neon requires TLS, so the parameter must survive in a
-       form asyncpg understands.
+    2. ``?sslmode=...`` → ``?ssl=...`` because asyncpg rejects ``sslmode``.
+       ``channel_binding`` is dropped entirely — asyncpg does not support it.
     """
     if database_url.startswith("postgres://"):
         database_url = "postgresql+asyncpg://" + database_url.removeprefix("postgres://")
@@ -21,9 +20,10 @@ def async_database_url(database_url: str) -> str:
     parsed = urlparse(database_url)
     if parsed.query:
         params = parse_qs(parsed.query)
+        # Drop channel_binding — asyncpg will raise TypeError if it stays.
+        params.pop("channel_binding", None)
         if "sslmode" in params:
             sslmode = params.pop("sslmode")[0]
-            # asyncpg accepts: true / false / require / verify-ca / verify-full.
             params["ssl"] = "true" if sslmode in {"disable", "allow", "prefer"} else sslmode
         new_query = urlencode({k: v[0] for k, v in params.items()})
         parsed = parsed._replace(query=new_query)
